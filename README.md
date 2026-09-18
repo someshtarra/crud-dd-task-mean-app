@@ -4,6 +4,14 @@ A production-grade deployment and automation setup for a full-stack **MEAN** (Mo
 
 ---
 
+## 💡 How the Application Works (In 10 Seconds)
+
+- **MongoDB**: Runs inside a Docker container (`mongo:6.0`) with a persistent volume to store your tutorial data.
+- **Backend (Node.js/Express)**: Connects to MongoDB on `localhost:27017` and serves REST APIs at `/api/tutorials`.
+- **Frontend (Angular 15 + Nginx)**: Runs on **Port 80**. It serves the compiled Angular Single Page Application and acts as an **Nginx reverse proxy**, automatically routing any API requests (`/api/`) directly to the backend while injecting CORS headers.
+
+---
+
 ## 🏗️ Architecture Overview
 
 ```mermaid
@@ -84,13 +92,12 @@ flowchart TD
 
 ---
 
-## 🚀 Quickstart: Local Deployment with Docker Compose
+## 💻 Part 1: Run Locally on Your Machine
 
 ### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) (v20.10+)
-- [Docker Compose](https://docs.docker.com/compose/) (v2.0+)
+- [Docker Desktop](https://docs.docker.com/get-docker/) installed and running.
 
-### Steps
+### Step-by-Step Instructions
 
 1. **Clone the repository**:
    ```bash
@@ -103,7 +110,7 @@ flowchart TD
    cp .env.example .env
    ```
 
-3. **Build and start all services**:
+3. **Start all services with Docker Compose**:
    ```bash
    docker compose up -d --build
    ```
@@ -112,27 +119,27 @@ flowchart TD
    ```bash
    docker compose ps
    ```
-   All 3 containers (`mean-mongodb`, `mean-backend`, `mean-frontend`) should show status `Up` (healthy).
+   All 3 containers (`mean-mongodb`, `mean-backend`, `mean-frontend`) will show status `Up` (healthy).
 
 5. **Access the application**:
-   - Web UI: Open [http://localhost](http://localhost) in your browser.
-   - Backend API: [http://localhost/api/tutorials](http://localhost/api/tutorials) (routed through Nginx on Port 80) or [http://localhost:8080/api/tutorials](http://localhost:8080/api/tutorials)
+   - **Web UI**: Open [http://localhost](http://localhost) in your browser.
+   - **Backend API**: Open [http://localhost/api/tutorials](http://localhost/api/tutorials) or [http://localhost:8080/api/tutorials](http://localhost:8080/api/tutorials).
 
 6. **Stop services**:
    ```bash
    docker compose down
    ```
-   *(To wipe database data, pass the `-v` flag: `docker compose down -v`)*
+   *(To wipe MongoDB database volume, pass `-v`: `docker compose down -v`)*
 
 ---
 
-## ☁️ Cloud Deployment on Ubuntu Virtual Machine (AWS / Azure)
+## ☁️ Part 2: Deploy on an Ubuntu Cloud VM (AWS / Azure)
 
 ### 1. Provision an Ubuntu VM
 
 - **Platform**: AWS EC2 or Azure Virtual Machines
 - **OS**: Ubuntu 22.04 LTS or 24.04 LTS (x86_64)
-- **Instance Size**: `t3.medium` or `t2.medium` (AWS) / `Standard_B2s` (Azure) recommended (minimum 2 vCPU, 4 GB RAM for Angular build and MongoDB runtime).
+- **Instance Size**: `t3.medium` (AWS) / `Standard_B2s` (Azure) recommended (minimum 2 vCPU, 4 GB RAM).
 
 ### 2. Configure Firewall / Security Group Rules
 
@@ -140,19 +147,19 @@ Allow the following inbound traffic in your Security Group (AWS) or Network Secu
 
 | Port | Protocol | Source | Purpose |
 |------|----------|--------|---------|
-| `22` | TCP | Your IP / CI runner | SSH Remote Administration |
+| `22` | TCP | Your IP / 0.0.0.0/0 | SSH Remote Administration |
 | `80` | TCP | `0.0.0.0/0` (Anywhere) | Public HTTP Application Access |
 
-*(Port 27017 remains private inside the Docker network).*
+*(Port 27017 stays internal within the private Docker network).*
 
-### 3. Install Docker & Docker Compose on Ubuntu
+### 3. Install Docker & Docker Compose on the VM
 
 SSH into your cloud VM:
 ```bash
-ssh -i /path/to/key.pem ubuntu@<VM_PUBLIC_IP>
+ssh -i /path/to/your-key.pem ubuntu@<VM_PUBLIC_IP>
 ```
 
-Run the automated Docker installation script:
+Run this automated script on the VM:
 ```bash
 # Update package repositories
 sudo apt-get update
@@ -170,71 +177,61 @@ sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 # Grant ubuntu user permission to run Docker without sudo
-sudo usermod -aG docker $USER
+sudo usermod -aG docker ubuntu
 newgrp docker
-
-# Verify installation
-docker --version
-docker compose version
 ```
 
-### 4. Deploy the Application on the VM
+### 4. Deploy and Launch Application on the VM
 
-1. Create application directory:
-   ```bash
-   mkdir -p ~/mean-app && cd ~/mean-app
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/someshtarra/crud-dd-task-mean-app.git
+cd crud-dd-task-mean-app
 
-2. Copy `docker-compose.yml` into `~/mean-app/docker-compose.yml`.
+# Copy environment variables
+cp .env.example .env
 
-3. Create the `.env` file:
-   ```bash
-   cat << 'EOF' > .env
-   DOCKERHUB_USERNAME=someshtarra
-   EOF
-   ```
+# Build and start containers
+docker compose up -d --build
 
-4. Pull the latest images from Docker Hub and launch:
-   ```bash
-   docker compose pull
-   docker compose up -d
-   ```
+# Verify running containers
+docker compose ps
+```
 
-5. Check container logs:
-   ```bash
-   docker compose logs -f
-   ```
+Access your live deployment in your browser:
+```text
+http://<VM_PUBLIC_IP>/
+```
 
 ---
 
-## 🔄 CI/CD Pipeline Configuration (GitHub Actions)
+## 🔄 Part 3: Automated CI/CD Pipeline (GitHub Actions)
 
-The repository includes an automated workflow defined in [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml).
+The repository includes an automated CI/CD workflow defined in [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml).
 
-### Pipeline Stages
+### How It Works
 
-1. **Build & Push (`build-and-push`)**:
-   - Authenticates with Docker Hub.
-   - Builds production images with multi-platform caching.
-   - Pushes images with `latest` and commit SHA tags:
-     - `<DOCKERHUB_USERNAME>/mean-backend`
-     - `<DOCKERHUB_USERNAME>/mean-frontend`
-2. **Automated Deploy (`deploy`)**:
-   - Secures SSH connection into the Ubuntu cloud VM.
-   - Transmits the latest `docker-compose.yml`.
-   - Pulls updated container images from Docker Hub.
-   - Performs zero-downtime rolling restart (`docker compose up -d --remove-orphans`).
-   - Prunes stale Docker images to conserve VM disk storage.
+1. **Trigger**: Every `git push` to the `main` branch.
+2. **Build & Push Job**:
+   - Logs into Docker Hub.
+   - Builds fresh images for both `backend` and `frontend`.
+   - Pushes them to Docker Hub with `latest` and commit SHA tags.
+3. **Automated Deploy Job**:
+   - Establishes a secure SSH connection to your Ubuntu Cloud VM.
+   - Updates `docker-compose.yml`.
+   - Pulls the newly built images from Docker Hub.
+   - Performs a zero-downtime rolling restart (`docker compose up -d`).
+   - Prunes dangling images to conserve VM disk space.
 
-### Required GitHub Repository Secrets
+### Configuring GitHub Secrets
 
-Navigate to **GitHub Repository -> Settings -> Secrets and variables -> Actions** and configure:
+Go to **GitHub Repository -> Settings -> Secrets and variables -> Actions** and add:
 
 | Secret Name | Description | Example Value |
 |-------------|-------------|---------------|
-| `DOCKERHUB_USERNAME` | Docker Hub user or organization | `someshtarra` |
+| `DOCKERHUB_USERNAME` | Docker Hub username or organization | `someshtarra` |
 | `DOCKERHUB_TOKEN` | Docker Hub Personal Access Token | `dckr_pat_xxxx` |
-| `VM_HOST` | Public IP or FQDN of the Ubuntu VM | `54.210.xx.xx` |
+| `VM_HOST` | Public IP address of your Ubuntu VM | `54.210.xx.xx` |
 | `VM_USERNAME` | SSH username on the VM | `ubuntu` |
 | `VM_SSH_KEY` | Private SSH Key for authentication | `-----BEGIN OPENSSH PRIVATE KEY...` |
 | `VM_PORT` | SSH Port (optional, defaults to 22) | `22` |
@@ -243,7 +240,7 @@ Navigate to **GitHub Repository -> Settings -> Secrets and variables -> Actions*
 
 ## 🌐 Nginx Reverse Proxy Setup Details
 
-The application utilizes Nginx directly inside the `frontend` container to serve static assets and act as a reverse proxy:
+The application uses Nginx directly inside the `frontend` container to serve static assets and act as a reverse proxy:
 
 ```nginx
 server {
