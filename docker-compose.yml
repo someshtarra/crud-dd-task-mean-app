@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: mean-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: dd_db
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - mean-network
+    ports:
+      - "27017:27017"
+      - "8080:8080" # Backend shares network namespace and listens here
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    image: ${DOCKERHUB_USERNAME:-someshtarra}/mean-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mean-backend
+    restart: unless-stopped
+    network_mode: "service:mongodb"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  frontend:
+    image: ${DOCKERHUB_USERNAME:-someshtarra}/mean-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mean-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - mongodb
+    networks:
+      - mean-network
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  mean-network:
+    driver: bridge
